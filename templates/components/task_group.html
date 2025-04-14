@@ -1,0 +1,25 @@
+<div id="task-group-{{ group_index }}" class="task-group">
+    <div class="task-count">#{{ task_group.tasks|length }} tasks</div>
+    <div class="task-actions">
+        <button class="research-btn" onclick="startResearch({{ group_index }})" {% if task_group.research_in_progress %}disabled{% endif %}>
+            {% if task_group.research_in_progress %}Ricerca in corso...{% else %}Ricerca automatica{% endif %}
+        </button>
+        {% if task_group.rag_id %}
+        <button class="query-rag-btn" onclick="location.href='{{ url_for('research.query_task_rag_route', group_index=group_index) }}'">
+            Consulta risultati
+        </button>
+        {% endif %}
+    </div>
+    <div class="task-list">
+        {% for task_index in range(task_group.tasks|length) %}
+            {% set task = task_group.tasks[task_index] %}
+            {% include 'components/task_item.html' %}
+        {% endfor %}
+    </div>
+    <div class="add-task-form">
+        <form class="new-task-form" onsubmit="addCustomTask(event, {{ group_index }})">
+            <input type="text" class="new-task-input" placeholder="Aggiungi un task personalizzato..." required>
+            <button type="submit" class="add-task-btn">Aggiungi</button>
+        </form>
+    </div>
+</div>

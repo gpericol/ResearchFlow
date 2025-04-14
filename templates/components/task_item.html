@@ -1,0 +1,12 @@
+<div id="task-{{ group_index }}-{{ task_index }}" class="task-item {% if task.completed %}completed{% endif %}">
+    <div class="task-content">
+        <span class="completion-icon">{% if task.completed %}✅{% else %}⭕{% endif %}</span>
+        <p>{{ task.point }}</p>
+    </div>
+    <button class="remove-task" 
+            data-group-index="{{ group_index }}" 
+            data-task-index="{{ task_index }}"
+            onclick="removeTask({{ group_index }}, {{ task_index }})">
+        Rimuovi
+    </button>
+</div>

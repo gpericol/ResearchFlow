@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interroga RAG</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .rag-query-container {
+            margin: 20px 0;
+        }
+        .response-container {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .response-text {
+            white-space: pre-wrap;
+            font-size: 1.1em;
+            line-height: 1.5;
+        }
+        .sources-container {
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+        }
+        .source-item {
+            background-color: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+        }
+        .source-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .source-link {
+            font-size: 0.9em;
+            color: #3498db;
+            margin-bottom: 10px;
+            display: block;
+            word-break: break-all;
+        }
+        .loading-indicator {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto 10px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Interroga i risultati della ricerca</h1>
+    <p><a href="{{ url_for('main.index') }}">&larr; Torna alla home</a></p>
+    
+    <div class="task-group">
+        <h2>Dettagli della ricerca</h2>
+        <p><strong>Prompt:</strong> {{ task_group.prompt }}</p>
+        <p><strong>ID RAG:</strong> {{ task_group.rag_id }}</p>
+        <p><strong>Task completati:</strong> {{ task_group.tasks|selectattr('completed', 'eq', true)|list|length }}/{{ task_group.tasks|length }}</p>
+    </div>
+    
+    <div class="rag-query-container">
+        <h2>Fai una domanda sui risultati della ricerca</h2>
+        <form id="query-form">
+            <textarea id="query-input" rows="3" placeholder="Inserisci la tua domanda..." required></textarea>
+            <button type="submit" class="research-btn">Interroga</button>
+        </form>
+    </div>
+    
+    <div id="loading" class="loading-indicator">
+        <div class="loading-spinner"></div>
+        <p>Elaborazione della risposta in corso...</p>
+    </div>
+    
+    <div id="response-container" class="response-container" style="display: none;">
+        <h2>Risposta</h2>
+        <div id="response-text" class="response-text"></div>
+        
+        <div id="sources-container" class="sources-container">
+            <h3>Fonti</h3>
+            <div id="sources-list"></div>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('query-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const query = document.getElementById('query-input').value.trim();
+            if (!query) return;
+            
+            // Mostra l'indicatore di caricamento
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('response-container').style.display = 'none';
+            
+            // Invia la query
+            fetch('{{ url_for("research.execute_rag_query_route", group_index=group_index) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: 'query=' + encodeURIComponent(query)
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Nascondi l'indicatore di caricamento
+                document.getElementById('loading').style.display = 'none';
+                
+                if (data.success) {
+                    // Mostra il container della risposta
+                    document.getElementById('response-container').style.display = 'block';
+                    
+                    // Aggiorna il testo della risposta
+                    document.getElementById('response-text').textContent = data.response;
+                    
+                    // Aggiorna le fonti
+                    const sourcesList = document.getElementById('sources-list');
+                    sourcesList.innerHTML = '';
+                    
+                    if (data.sources && data.sources.length > 0) {
+                        data.sources.forEach((source, index) => {
+                            const sourceItem = document.createElement('div');
+                            sourceItem.className = 'source-item';
+                            
+                            let sourceHTML = '';
+                            if (source.title) {
+                                sourceHTML += `<div class="source-title">${source.title}</div>`;
+                            }
+                            if (source.link) {
+                                sourceHTML += `<a class="source-link" href="${source.link}" target="_blank">${source.link}</a>`;
+                            }
+                            sourceHTML += `<div class="source-score">Punteggio di rilevanza: ${(source.score * 100).toFixed(2)}%</div>`;
+                            
+                            sourceItem.innerHTML = sourceHTML;
+                            sourcesList.appendChild(sourceItem);
+                        });
+                    } else {
+                        sourcesList.innerHTML = '<p>Nessuna fonte disponibile.</p>';
+                    }
+                } else {
+                    alert('Errore: ' + (data.error || 'Si è verificato un errore durante l\'elaborazione della query.'));
+                }
+            })
+            .catch(error => {
+                document.getElementById('loading').style.display = 'none';
+                console.error('Errore:', error);
+                alert('Si è verificato un errore durante l\'elaborazione della query.');
+            });
+        });
+    </script>
+</body>
+</html>

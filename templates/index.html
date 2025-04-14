@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ricerca Avanzata</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</head>
+<body>
+    <h1>Inserisci la tua richiesta</h1>
+    <form id="main-form" method="POST" action="{{ url_for('main.questions') }}">
+        <textarea name="prompt" rows="5" cols="60">{{ refined_prompt or '' }}</textarea><br>
+        <div class="button-group">
+            <button type="submit">Approfondisci</button>
+            <button type="submit" formaction="{{ url_for('task.generate_tasks') }}">Genera Task List</button>
+        </div>
+    </form>
+
+    {% if saved_data.prompts or saved_data.tasks %}
+    <div class="saved-data">
+        {% if saved_data.prompts %}
+        <div class="prompts-container">
+            <h2>Prompt Salvati</h2>
+            {% for prompt in saved_data.prompts %}
+                {% include 'components/prompt_item.html' %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if saved_data.tasks %}
+        <div class="tasks-container">
+            <h2>Task List Unificata</h2>
+            {% for group_index in range(saved_data.tasks|length) %}
+                {% set task_group = saved_data.tasks[group_index] %}
+                {% include 'components/task_group.html' %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</body>
+</html>

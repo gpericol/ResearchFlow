@@ -1,0 +1,65 @@
+# Ambienti virtuali
+venv/
+env/
+ENV/
+.venv/
+.env/
+.ENV/
+
+# File Python compilati
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribuzioni e packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# File di cache
+.cache/
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+.coverage
+.coverage.*
+
+# Output e log
+logs/
+*.log
+output/
+results/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# VS Code - esclusa completamente
+.vscode/
+
+# File di configurazione locali
+.env
+instance/
+.webassets-cache
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# File temporanei
+*.tmp
+*.bak
+*.swp
+*~
+
+# File di sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Altri file specifici per il tuo progetto
+# Aggiungi qui altri pattern specifici per il tuo progetto
