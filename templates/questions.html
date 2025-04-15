@@ -5,12 +5,30 @@
     <title>Domande di Approfondimento</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <style>
+        .header-nav {
+            margin-bottom: 20px;
+        }
+        
+        .header-nav a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        
+        .header-nav a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
+    <div class="header-nav">
+        <a href="{{ url_for('main.research_dashboard', research_id=research_id) }}">&larr; Torna alla dashboard della ricerca</a>
+    </div>
+
     <h1>Rispondi per chiarire meglio la richiesta</h1>
     <p class="intro">Ecco tre domande per rendere più specifica la tua richiesta:</p>
 
-    <form id="questions-form" method="POST" action="{{ url_for('main.submit_answers') }}">
+    <form id="questions-form" method="POST" action="{{ url_for('main.research_submit_answers', research_id=research_id) }}">
         <input type="hidden" name="original_prompt" value="{{ original_prompt }}">
 
         {% for question in questions %}

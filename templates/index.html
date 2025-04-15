@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
     <meta charset="UTF-8">
     <title>Ricerca Avanzata</title>
@@ -7,12 +7,17 @@
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </head>
 <body>
+    <div class="header-nav">
+        <a href="{{ url_for('main.index') }}">&larr; Torna alla lista ricerche</a>
+        <h2 class="research-title">{{ saved_data.title }}</h2>
+    </div>
+
     <h1>Inserisci la tua richiesta</h1>
-    <form id="main-form" method="POST" action="{{ url_for('main.questions') }}">
+    <form id="main-form" method="POST" action="{{ url_for('main.research_questions', research_id=research_id) }}">
         <textarea name="prompt" rows="5" cols="60">{{ refined_prompt or '' }}</textarea><br>
         <div class="button-group">
             <button type="submit">Approfondisci</button>
-            <button type="submit" formaction="{{ url_for('task.generate_tasks') }}">Genera Task List</button>
+            <button type="submit" formaction="{{ url_for('task.generate_tasks', research_id=research_id) }}">Genera Task List</button>
         </div>
     </form>
 
@@ -22,21 +27,244 @@
         <div class="prompts-container">
             <h2>Prompt Salvati</h2>
             {% for prompt in saved_data.prompts %}
-                {% include 'components/prompt_item.html' %}
+                <div class="prompt-item">
+                    <div class="prompt-refined">{{ prompt.refined }}</div>
+                    <div class="prompt-original">Originale: {{ prompt.original }}</div>
+                    {% if prompt.answers %}
+                    <div class="prompt-answers">
+                        <h4>Risposte alle domande:</h4>
+                        <ul>
+                            {% for key, value in prompt.answers.items() %}
+                            <li><strong>{{ key.replace('answer_', 'Domanda ') }}:</strong> {{ value }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
             {% endfor %}
         </div>
         {% endif %}
 
         {% if saved_data.tasks %}
         <div class="tasks-container">
-            <h2>Task List Unificata</h2>
+            <h2>Task List</h2>
             {% for group_index in range(saved_data.tasks|length) %}
                 {% set task_group = saved_data.tasks[group_index] %}
-                {% include 'components/task_group.html' %}
+                <div class="task-group" id="task-group-{{ group_index }}">
+                    <h3>{{ task_group.prompt }}</h3>
+                    
+                    <div class="task-list">
+                        {% if task_group.tasks %}
+                            {% for task_index in range(task_group.tasks|length) %}
+                                {% set task = task_group.tasks[task_index] %}
+                                <div class="task-item {% if task.completed %}completed{% endif %}" id="task-{{ group_index }}-{{ task_index }}">
+                                    <div class="task-content">
+                                        <span class="completion-icon">{% if task.completed %}✅{% else %}⭕{% endif %}</span>
+                                        <div class="task-description">{{ task.description or task.point }}</div>
+                                        <div class="task-actions">
+                                            <button class="remove-task-btn" onclick="removeTask('{{ research_id }}', {{ group_index }}, {{ task_index }})">✕</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="no-tasks">Nessun task disponibile. Genera dei task o aggiungine uno personalizzato.</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Aggiunta task personalizzato -->
+                    <div class="add-task-form">
+                        <input type="text" id="custom-task-{{ group_index }}" placeholder="Aggiungi un task personalizzato...">
+                        <button onclick="addCustomTask('{{ research_id }}', {{ group_index }})" class="add-task-btn">+</button>
+                    </div>
+                    
+                    <!-- Pulsanti per la ricerca -->
+                    <div class="task-group-actions">
+                        {% if not task_group.research_in_progress %}
+                            <button onclick="startResearch('{{ research_id }}', {{ group_index }})" class="research-btn" {% if task_group.tasks|selectattr('completed', 'eq', false)|list|length == 0 and task_group.tasks|length > 0 %}disabled{% endif %}>
+                                Avvia Ricerca
+                            </button>
+                            
+                            {% if task_group.rag_id %}
+                                <a href="{{ url_for('research.query_task_rag_route', research_id=research_id, group_index=group_index) }}" class="query-rag-btn">
+                                    Interroga Risultati
+                                </a>
+                            {% endif %}
+                        {% else %}
+                            <button class="research-btn disabled" disabled>Ricerca in corso...</button>
+                            <div class="progress-container" id="progress-{{ group_index }}">
+                                <div class="progress-bar" style="width: 0%"></div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
             {% endfor %}
         </div>
         {% endif %}
     </div>
     {% endif %}
+
+    <script>
+        // Funzione per rimuovere un task
+        function removeTask(researchId, groupIndex, taskIndex) {
+            if (confirm('Sei sicuro di voler rimuovere questo task?')) {
+                fetch(`/task/research/${researchId}/remove-task/${groupIndex}/${taskIndex}`, {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Rimuovi il task dall'interfaccia
+                        document.getElementById(`task-${groupIndex}-${taskIndex}`).remove();
+                    } else {
+                        alert('Errore durante la rimozione del task: ' + data.error);
+                    }
+                });
+            }
+        }
+        
+        // Funzione per aggiungere un task personalizzato
+        function addCustomTask(researchId, groupIndex) {
+            const inputElement = document.getElementById(`custom-task-${groupIndex}`);
+            const taskText = inputElement.value.trim();
+            
+            if (!taskText) return;
+            
+            fetch(`/task/research/${researchId}/add-custom-task`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    groupIndex: groupIndex,
+                    taskText: taskText
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Aggiungi il task all'interfaccia
+                    const taskList = document.querySelector(`#task-group-${groupIndex} .task-list`);
+                    
+                    // Crea un nuovo elemento per il task
+                    const newTaskElement = document.createElement('div');
+                    newTaskElement.className = 'task-item';
+                    newTaskElement.id = `task-${groupIndex}-${data.index}`;
+                    
+                    newTaskElement.innerHTML = `
+                        <div class="task-content">
+                            <div class="task-description">${data.task.description}</div>
+                            <div class="task-actions">
+                                <button class="remove-task-btn" onclick="removeTask('${researchId}', ${groupIndex}, ${data.index})">✕</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Aggiungi il nuovo task alla lista
+                    taskList.appendChild(newTaskElement);
+                    
+                    // Pulisci l'input
+                    inputElement.value = '';
+                } else {
+                    alert('Errore durante l\'aggiunta del task: ' + data.error);
+                }
+            });
+        }
+        
+        // Funzione per avviare la ricerca
+        function startResearch(researchId, groupIndex) {
+            console.log(`Avvio ricerca per research_id=${researchId}, group_index=${groupIndex}`);
+            
+            if (confirm('Sei sicuro di voler avviare la ricerca per questo gruppo di task?')) {
+                // Aggiungi immediatamente un indicatore visivo che il pulsante è stato premuto
+                const button = document.querySelector(`#task-group-${groupIndex} .research-btn`);
+                button.disabled = true;
+                button.textContent = "Avvio in corso...";
+                
+                fetch(`/research/${researchId}/start-research/${groupIndex}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    console.log("Risposta ricevuta:", response);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("Dati ricevuti:", data);
+                    if (data.success) {
+                        // Aggiorna l'interfaccia per mostrare che la ricerca è in corso
+                        const actionsContainer = document.querySelector(`#task-group-${groupIndex} .task-group-actions`);
+                        actionsContainer.innerHTML = `
+                            <button class="research-btn disabled" disabled>Ricerca in corso...</button>
+                            <div class="progress-container" id="progress-${groupIndex}">
+                                <div class="progress-bar" style="width: 0%"></div>
+                            </div>
+                        `;
+                        
+                        // Avvia il polling per aggiornare lo stato
+                        pollResearchProgress(researchId, groupIndex);
+                    } else {
+                        alert('Errore durante l\'avvio della ricerca: ' + data.error);
+                        button.disabled = false;
+                        button.textContent = "Avvia Ricerca";
+                    }
+                })
+                .catch(error => {
+                    console.error("Errore nella richiesta:", error);
+                    alert('Si è verificato un errore durante l\'avvio della ricerca. Controlla la console per dettagli.');
+                    
+                    const button = document.querySelector(`#task-group-${groupIndex} .research-btn`);
+                    if (button) {
+                        button.disabled = false;
+                        button.textContent = "Avvia Ricerca";
+                    }
+                });
+            }
+        }
+        
+        // Funzione per controllare lo stato della ricerca
+        function pollResearchProgress(researchId, groupIndex) {
+            const progressInterval = setInterval(() => {
+                fetch(`/research/${researchId}/check-research-progress/${groupIndex}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Aggiorna la barra di avanzamento
+                    updateProgressBar(groupIndex, data);
+                    
+                    // Se la ricerca è completata, interrompi il polling e aggiorna l'interfaccia
+                    if (data.completed) {
+                        clearInterval(progressInterval);
+                        
+                        // Ricarica la pagina per mostrare i risultati aggiornati
+                        window.location.reload();
+                    }
+                });
+            }, 2000);  // Controlla ogni 2 secondi
+        }
+        
+        // Funzione per aggiornare la barra di avanzamento
+        function updateProgressBar(groupIndex, progressData) {
+            const progressBar = document.querySelector(`#progress-${groupIndex} .progress-bar`);
+            const totalTasks = progressData.total_tasks || 1;
+            const completedTasks = progressData.completed_tasks ? progressData.completed_tasks.length : 0;
+            
+            const progressPercentage = (completedTasks / totalTasks) * 100;
+            progressBar.style.width = `${progressPercentage}%`;
+        }
+        
+        // Avvia il polling per le ricerche in corso al caricamento della pagina
+        document.addEventListener('DOMContentLoaded', function() {
+            const taskGroups = document.querySelectorAll('.task-group');
+            
+            taskGroups.forEach((group, index) => {
+                if (group.querySelector('.research-btn.disabled')) {
+                    // Se c'è un pulsante di ricerca disabilitato, significa che la ricerca è in corso
+                    pollResearchProgress('{{ research_id }}', index);
+                }
+            });
+        });
+    </script>
 </body>
 </html>

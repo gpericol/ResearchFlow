@@ -148,15 +148,18 @@ function startResearch(groupIndex) {
     button.disabled = true;
     button.textContent = "Ricerca in corso...";
     
+    // Otteniamo l'ID della ricerca dal dataset del body
+    const researchId = document.body.dataset.researchId || '';
+    
     // Avviamo la ricerca con una chiamata AJAX
-    fetch(`/research/start-research/${groupIndex}`, {
+    fetch(`/research/${researchId}/start-research/${groupIndex}`, {
         method: 'POST',
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
             // Iniziamo a controllare lo stato di avanzamento
-            checkResearchProgress(groupIndex);
+            checkResearchProgress(researchId, groupIndex);
         } else {
             alert("Errore nell'avvio della ricerca: " + data.error);
             button.disabled = false;
@@ -172,10 +175,11 @@ function startResearch(groupIndex) {
 
 /**
  * Controlla lo stato di avanzamento della ricerca
+ * @param {string} researchId - ID della ricerca
  * @param {number} groupIndex - Indice del gruppo di task
  */
-function checkResearchProgress(groupIndex) {
-    fetch(`/research/check-research-progress/${groupIndex}`)
+function checkResearchProgress(researchId, groupIndex) {
+    fetch(`/research/${researchId}/check-research-progress/${groupIndex}`)
     .then(response => response.json())
     .then(data => {
         if (data.completed) {
@@ -200,7 +204,7 @@ function checkResearchProgress(groupIndex) {
             }
             
             // Controlliamo nuovamente tra 2 secondi
-            setTimeout(() => checkResearchProgress(groupIndex), 2000);
+            setTimeout(() => checkResearchProgress(researchId, groupIndex), 2000);
         } else {
             // La ricerca è stata interrotta per qualche motivo
             const button = document.querySelector(`#task-group-${groupIndex} .research-btn`);
@@ -211,8 +215,137 @@ function checkResearchProgress(groupIndex) {
     .catch(error => {
         console.error("Errore nel controllo dello stato:", error);
         // Riproviamo dopo un po'
-        setTimeout(() => checkResearchProgress(groupIndex), 5000);
+        setTimeout(() => checkResearchProgress(researchId, groupIndex), 5000);
     });
 }
+
+/**
+ * Controlla lo stato di avanzamento della ricerca
+ * @param {string} researchId - ID della ricerca
+ * @param {number} groupIndex - Indice del gruppo di task
+ */
+function pollResearchProgress(researchId, groupIndex) {
+    fetch(`/research/${researchId}/check-research-progress/${groupIndex}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.completed) {
+            // La ricerca è completata, ricarichiamo la pagina
+            location.reload();
+        } else if (data.in_progress) {
+            // Aggiorniamo lo stato dei task
+            updateTasksStatus(groupIndex, data);
+            
+            // Aggiorniamo la barra di progresso
+            updateProgressBar(groupIndex, data);
+            
+            // Controlliamo nuovamente lo stato tra 2 secondi
+            setTimeout(() => pollResearchProgress(researchId, groupIndex), 2000);
+        } else {
+            // La ricerca è stata interrotta per qualche motivo
+            const button = document.querySelector(`#task-group-${groupIndex} .research-btn`);
+            button.disabled = false;
+            button.textContent = "Avvia Ricerca";
+            
+            // Rimuovi la barra di progresso
+            const progressContainer = document.querySelector(`#progress-${groupIndex}`);
+            if (progressContainer) {
+                progressContainer.remove();
+            }
+        }
+    })
+    .catch(error => {
+        console.error("Errore nel controllo dello stato:", error);
+        // Riproviamo dopo un po'
+        setTimeout(() => pollResearchProgress(researchId, groupIndex), 5000);
+    });
+}
+
+/**
+ * Aggiorna lo stato dei task in base ai dati ricevuti
+ * @param {number} groupIndex - Indice del gruppo di task
+ * @param {Object} data - Dati sullo stato dei task
+ */
+function updateTasksStatus(groupIndex, data) {
+    // Prima rimuoviamo la classe 'in-progress' da tutti i task
+    const allTasks = document.querySelectorAll(`#task-group-${groupIndex} .task-item`);
+    allTasks.forEach(task => {
+        task.classList.remove('in-progress');
+    });
+    
+    // Aggiorniamo i task completati
+    data.completed_tasks.forEach(taskIndex => {
+        const taskElement = document.querySelector(`#task-${groupIndex}-${taskIndex}`);
+        if (taskElement) {
+            taskElement.classList.add('completed');
+            taskElement.classList.remove('in-progress');
+            const iconElement = taskElement.querySelector('.completion-icon');
+            if (iconElement) {
+                iconElement.innerHTML = '✅';
+            }
+        }
+    });
+    
+    // Evidenziamo il task in corso
+    if (data.current_task_index !== null) {
+        const currentTaskElement = document.querySelector(`#task-${groupIndex}-${data.current_task_index}`);
+        if (currentTaskElement) {
+            currentTaskElement.classList.add('in-progress');
+            currentTaskElement.classList.remove('completed');
+            const iconElement = currentTaskElement.querySelector('.completion-icon');
+            if (iconElement && !data.completed_tasks.includes(data.current_task_index)) {
+                iconElement.innerHTML = '🔄';
+            }
+        }
+    }
+}
+
+/**
+ * Aggiorna la barra di progresso
+ * @param {number} groupIndex - Indice del gruppo di task
+ * @param {Object} data - Dati sullo stato dei task
+ */
+function updateProgressBar(groupIndex, data) {
+    const progressContainer = document.querySelector(`#progress-${groupIndex}`);
+    if (!progressContainer) {
+        // Se la barra di progresso non esiste, la creiamo
+        const actionsContainer = document.querySelector(`#task-group-${groupIndex} .task-group-actions`);
+        const progressElement = document.createElement('div');
+        progressElement.className = 'progress-container';
+        progressElement.id = `progress-${groupIndex}`;
+        progressElement.innerHTML = '<div class="progress-bar"></div>';
+        actionsContainer.appendChild(progressElement);
+    }
+    
+    const progressBar = document.querySelector(`#progress-${groupIndex} .progress-bar`);
+    const totalTasks = data.total_tasks || 1;
+    const completedTasks = data.completed_tasks ? data.completed_tasks.length : 0;
+    
+    // Calcola la percentuale di completamento
+    const progressPercentage = Math.floor((completedTasks / totalTasks) * 100);
+    
+    // Aggiorna la larghezza della barra di progresso
+    progressBar.style.width = `${progressPercentage}%`;
+    
+    // Aggiunge un tooltip con la percentuale
+    progressBar.title = `${progressPercentage}% completato (${completedTasks}/${totalTasks})`;
+}
+
+/**
+ * Inizializza il polling per le ricerche in corso al caricamento della pagina
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const researchId = document.body.dataset.researchId || '';
+    const taskGroups = document.querySelectorAll('.task-group');
+    
+    taskGroups.forEach((group, index) => {
+        const groupIndex = group.id.replace('task-group-', '');
+        
+        // Verifica se c'è una ricerca in corso
+        if (group.querySelector('.research-btn.disabled')) {
+            // Se c'è un pulsante di ricerca disabilitato, significa che la ricerca è in corso
+            pollResearchProgress(researchId, groupIndex);
+        }
+    });
+});
 
 // Aggiungi qui altre funzioni JavaScript che potrebbero servire in futuro

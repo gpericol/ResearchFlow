@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>ResearchFlow - Gestione Ricerche</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <style>
+        .research-list {
+            margin-top: 30px;
+        }
+        
+        .research-item {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 5px solid #3498db;
+            transition: all 0.3s ease;
+        }
+        
+        .research-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .research-title {
+            font-size: 1.3em;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        
+        .research-prompt {
+            color: #555;
+            margin-bottom: 15px;
+            font-style: italic;
+        }
+        
+        .research-date {
+            color: #777;
+            font-size: 0.9em;
+        }
+        
+        .new-research-form {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .new-research-form input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <h1>ResearchFlow - Gestione Ricerche</h1>
+    
+    <div class="new-research-form">
+        <h2>Crea una nuova ricerca</h2>
+        <form method="POST" action="{{ url_for('main.create_research') }}">
+            <input type="text" name="title" placeholder="Titolo della ricerca" required>
+            <button type="submit" class="create-btn">Crea Nuova Ricerca</button>
+        </form>
+    </div>
+    
+    <div class="research-list">
+        <h2>Le tue ricerche</h2>
+        
+        {% if researches %}
+            {% for research in researches %}
+                <div class="research-item">
+                    <div class="research-title">
+                        <a href="{{ url_for('main.research_dashboard', research_id=research.id) }}">
+                            {{ research.title }}
+                        </a>
+                    </div>
+                    {% if research.prompt %}
+                        <div class="research-prompt">
+                            {{ research.prompt|truncate(150) }}
+                        </div>
+                    {% endif %}
+                    <div class="research-date">
+                        Creata il {{ research.created_at }}
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <p>Non hai ancora creato nessuna ricerca.</p>
+                <p>Crea la tua prima ricerca utilizzando il form qui sopra!</p>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>

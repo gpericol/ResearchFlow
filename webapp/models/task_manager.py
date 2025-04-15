@@ -1,13 +1,14 @@
 from typing import Dict, Any, List, Optional
 
 from agents.taskgenerator import generate_tasks
-from webapp.models.data_manager import load_data, save_data
+from webapp.models.data_manager import load_research_data, save_research_data
 
-def create_task(group_index: int, task_text: str) -> Dict[str, Any]:
+def create_task(research_id: str, group_index: int, task_text: str) -> Dict[str, Any]:
     """
-    Crea un nuovo task in un gruppo specifico.
+    Crea un nuovo task in un gruppo specifico di una ricerca.
     
     Args:
+        research_id: L'ID della ricerca
         group_index: L'indice del gruppo in cui aggiungere il task
         task_text: Il testo del task da aggiungere
         
@@ -17,60 +18,70 @@ def create_task(group_index: int, task_text: str) -> Dict[str, Any]:
     if task_text is None or not task_text.strip():
         return {"success": False, "error": "Testo del task mancante"}
     
-    stored_data = load_data()
+    # Carica i dati della ricerca
+    research_data = load_research_data(research_id)
     
-    if 0 <= group_index < len(stored_data["tasks"]):
-        # Crea un nuovo task con la stessa struttura degli altri
+    if not research_data:
+        return {"success": False, "error": "Ricerca non trovata"}
+    
+    if 0 <= group_index < len(research_data.get("tasks", [])):
+        # Crea un nuovo task
         new_task = {
-            "point": task_text,
-            "completed": False,
-            "notes": ""
+            "description": task_text,
+            "completed": False
         }
         
         # Aggiungi il task al gruppo appropriato
-        stored_data["tasks"][group_index]["tasks"].append(new_task)
-        # Salva i dati aggiornati
-        save_data(stored_data)
+        research_data["tasks"][group_index]["tasks"].append(new_task)
         
-        # Restituisci l'indice del nuovo task
-        new_task_index = len(stored_data["tasks"][group_index]["tasks"]) - 1
-        return {"success": True, "taskIndex": new_task_index}
+        # Salva i dati aggiornati
+        save_research_data(research_id, research_data)
+        
+        # Restituisci il nuovo task e il suo indice
+        new_task_index = len(research_data["tasks"][group_index]["tasks"]) - 1
+        return {"success": True, "task": new_task, "index": new_task_index}
     
     return {"success": False, "error": "Gruppo non trovato"}
 
-def remove_task(task_group_index: int, task_index: int) -> Dict[str, Any]:
+def remove_task(research_id: str, task_group_index: int, task_index: int) -> Dict[str, Any]:
     """
-    Rimuove un task da un gruppo.
+    Rimuove un task da un gruppo di una ricerca.
     
     Args:
+        research_id: L'ID della ricerca
         task_group_index: L'indice del gruppo a cui appartiene il task
         task_index: L'indice del task da rimuovere
         
     Returns:
         Dizionario con il risultato dell'operazione
     """
-    data = load_data()
+    # Carica i dati della ricerca
+    research_data = load_research_data(research_id)
     
-    if 0 <= task_group_index < len(data["tasks"]):
-        if 0 <= task_index < len(data["tasks"][task_group_index]["tasks"]):
+    if not research_data:
+        return {"success": False, "error": "Ricerca non trovata"}
+    
+    if 0 <= task_group_index < len(research_data.get("tasks", [])):
+        if 0 <= task_index < len(research_data["tasks"][task_group_index].get("tasks", [])):
             # Rimuovi il task specifico
-            data["tasks"][task_group_index]["tasks"].pop(task_index)
+            research_data["tasks"][task_group_index]["tasks"].pop(task_index)
             
             # Se non ci sono più task nel gruppo, rimuovi l'intero gruppo
-            if not data["tasks"][task_group_index]["tasks"]:
-                data["tasks"].pop(task_group_index)
+            if not research_data["tasks"][task_group_index]["tasks"]:
+                research_data["tasks"].pop(task_group_index)
                 
-            save_data(data)
+            save_research_data(research_id, research_data)
             return {"success": True}
     
     return {"success": False, "error": "Task non trovato"}
 
-def generate_task_list(prompt: str) -> Dict[str, Any]:
+def generate_task_list(prompt: str, research_id: str = None) -> Dict[str, Any]:
     """
     Genera una lista di task basata su un prompt.
     
     Args:
         prompt: Il prompt da cui generare i task
+        research_id: L'ID della ricerca (opzionale, per compatibilità)
         
     Returns:
         Dizionario con il risultato dell'operazione
@@ -78,31 +89,15 @@ def generate_task_list(prompt: str) -> Dict[str, Any]:
     if not prompt.strip():
         return {"success": False, "error": "Prompt vuoto"}
     
-    data = load_data()
+    # Usa direttamente la funzione generate_tasks
+    task_data = generate_tasks(prompt)
     
-    # Usa direttamente la funzione generate_tasks invece della classe
-    # Passa alla funzione i task esistenti per evitare duplicati
-    task_data = generate_tasks(prompt, existing_tasks=data.get("tasks", []))
+    # Crea una nuova task list basata sul prompt
+    task_list = [{
+        "prompt": prompt,
+        "tasks": task_data["research_points"],
+        "research_in_progress": False,
+        "rag_id": None
+    }]
     
-    # Aggiorna l'ultimo prompt anche quando generiamo i task
-    data["last_prompt"] = {
-        "original": prompt,
-        "refined": prompt
-    }
-    
-    # Aggiungi i nuovi task alla task list unificata (che sarà sempre all'indice 0)
-    if not data["tasks"]:
-        # Se per qualche motivo non esiste una task list, creane una
-        data["tasks"] = [{
-            "prompt": "Task List Unificata",
-            "tasks": task_data["research_points"],
-            "research_in_progress": False,
-            "rag_id": None
-        }]
-    else:
-        # Aggiungi i nuovi task alla task list esistente
-        data["tasks"][0]["tasks"].extend(task_data["research_points"])
-    
-    save_data(data)
-    
-    return {"success": True}
+    return {"success": True, "tasks": task_list}

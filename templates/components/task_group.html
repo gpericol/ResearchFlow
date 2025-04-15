@@ -5,7 +5,7 @@
             {% if task_group.research_in_progress %}Ricerca in corso...{% else %}Ricerca automatica{% endif %}
         </button>
         {% if task_group.rag_id %}
-        <button class="query-rag-btn" onclick="location.href='{{ url_for('research.query_task_rag_route', group_index=group_index) }}'">
+        <button class="query-rag-btn" onclick="location.href='{{ url_for('research.query_task_rag_route', research_id=research_id, group_index=group_index) }}'">
             Consulta risultati
         </button>
         {% endif %}
