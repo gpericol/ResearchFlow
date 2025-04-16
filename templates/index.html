@@ -5,11 +5,65 @@
     <title>Ricerca Avanzata</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <style>
+        .log-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            display: none; /* nascosto di default */
+        }
+        
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .log-title {
+            font-weight: bold;
+            margin: 0;
+        }
+        
+        .log-textarea {
+            width: 100%;
+            height: 300px;
+            font-family: monospace;
+            font-size: 12px;
+            background-color: #222;
+            color: #0f0;
+            padding: 10px;
+            border-radius: 5px;
+            resize: vertical;
+            overflow-y: scroll;
+            white-space: pre-wrap;
+        }
+        
+        .close-logs-btn {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+    </style>
 </head>
-<body>
+<body data-research-id="{{ research_id }}">
     <div class="header-nav">
         <a href="{{ url_for('main.index') }}">&larr; Torna alla lista ricerche</a>
         <h2 class="research-title">{{ saved_data.title }}</h2>
+    </div>
+
+    <!-- Container per i log, inizialmente nascosto -->
+    <div id="log-container" class="log-container">
+        <div class="log-header">
+            <h3 class="log-title">Log della ricerca in tempo reale</h3>
+            <button id="close-logs-btn" class="close-logs-btn">Chiudi</button>
+        </div>
+        <textarea id="log-textarea" class="log-textarea" readonly></textarea>
     </div>
 
     <h1>Inserisci la tua richiesta</h1>
@@ -92,9 +146,7 @@
                             {% endif %}
                         {% else %}
                             <button class="research-btn disabled" disabled>Ricerca in corso...</button>
-                            <div class="progress-container" id="progress-{{ group_index }}">
-                                <div class="progress-bar" style="width: 0%"></div>
-                            </div>
+                            <button class="show-logs-btn" onclick="showResearchLogs('{{ research_id }}')">Mostra log</button>
                         {% endif %}
                     </div>
                 </div>
@@ -198,9 +250,7 @@
                         const actionsContainer = document.querySelector(`#task-group-${groupIndex} .task-group-actions`);
                         actionsContainer.innerHTML = `
                             <button class="research-btn disabled" disabled>Ricerca in corso...</button>
-                            <div class="progress-container" id="progress-${groupIndex}">
-                                <div class="progress-bar" style="width: 0%"></div>
-                            </div>
+                            <button class="show-logs-btn" onclick="showResearchLogs('${researchId}')">Mostra log</button>
                         `;
                         
                         // Avvia il polling per aggiornare lo stato
@@ -230,9 +280,6 @@
                 fetch(`/research/${researchId}/check-research-progress/${groupIndex}`)
                 .then(response => response.json())
                 .then(data => {
-                    // Aggiorna la barra di avanzamento
-                    updateProgressBar(groupIndex, data);
-                    
                     // Se la ricerca è completata, interrompi il polling e aggiorna l'interfaccia
                     if (data.completed) {
                         clearInterval(progressInterval);
@@ -244,14 +291,66 @@
             }, 2000);  // Controlla ogni 2 secondi
         }
         
-        // Funzione per aggiornare la barra di avanzamento
-        function updateProgressBar(groupIndex, progressData) {
-            const progressBar = document.querySelector(`#progress-${groupIndex} .progress-bar`);
-            const totalTasks = progressData.total_tasks || 1;
-            const completedTasks = progressData.completed_tasks ? progressData.completed_tasks.length : 0;
+        // Variabili globali per gestire i log
+        let logPollingInterval = null;
+        let lastLogLines = 0;
+        
+        // Funzione per mostrare i log della ricerca
+        function showResearchLogs(researchId) {
+            // Mostra il container dei log
+            const logContainer = document.getElementById('log-container');
+            logContainer.style.display = 'block';
             
-            const progressPercentage = (completedTasks / totalTasks) * 100;
-            progressBar.style.width = `${progressPercentage}%`;
+            // Inizializza la textarea dei log
+            const logTextarea = document.getElementById('log-textarea');
+            logTextarea.value = 'Caricamento log in corso...';
+            
+            // Inizia il polling dei log
+            fetchAndUpdateLogs(researchId);
+            
+            // Avvia l'aggiornamento periodico dei log
+            if (logPollingInterval === null) {
+                logPollingInterval = setInterval(() => {
+                    fetchAndUpdateLogs(researchId);
+                }, 2000); // Aggiorna ogni 2 secondi
+            }
+            
+            // Configura il pulsante per chiudere i log
+            document.getElementById('close-logs-btn').onclick = function() {
+                logContainer.style.display = 'none';
+                
+                // Ferma il polling quando si chiudono i log
+                if (logPollingInterval !== null) {
+                    clearInterval(logPollingInterval);
+                    logPollingInterval = null;
+                }
+            };
+        }
+        
+        // Funzione per recuperare e aggiornare i log
+        function fetchAndUpdateLogs(researchId) {
+            fetch(`/research/${researchId}/get-logs?lines=1000`)
+                .then(response => response.json())
+                .then(data => {
+                    const logTextarea = document.getElementById('log-textarea');
+                    
+                    if (data.logs && data.logs.length > 0) {
+                        // Aggiorna il contenuto della textarea con i log
+                        logTextarea.value = data.logs.join('');
+                        
+                        // Se ci sono nuove righe di log, scorri in fondo
+                        if (data.logs.length > lastLogLines) {
+                            logTextarea.scrollTop = logTextarea.scrollHeight;
+                            lastLogLines = data.logs.length;
+                        }
+                    } else {
+                        logTextarea.value = 'Nessun log disponibile.';
+                    }
+                })
+                .catch(error => {
+                    console.error('Errore nel recupero dei log:', error);
+                    document.getElementById('log-textarea').value = 'Errore nel recupero dei log: ' + error;
+                });
         }
         
         // Avvia il polling per le ricerche in corso al caricamento della pagina
@@ -264,6 +363,9 @@
                     pollResearchProgress('{{ research_id }}', index);
                 }
             });
+            
+            // Nascondi la casella dei log all'inizio
+            document.getElementById('log-container').style.display = 'none';
         });
     </script>
 </body>

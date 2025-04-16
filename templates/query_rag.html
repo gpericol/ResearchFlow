@@ -140,8 +140,8 @@
                             if (source.title) {
                                 sourceHTML += `<div class="source-title">${source.title}</div>`;
                             }
-                            if (source.link) {
-                                sourceHTML += `<a class="source-link" href="${source.link}" target="_blank">${source.link}</a>`;
+                            if (source.url) {
+                                sourceHTML += `<a class="source-link" href="${source.url}" target="_blank">${source.url}</a>`;
                             }
                             sourceHTML += `<div class="source-score">Punteggio di rilevanza: ${(source.score * 100).toFixed(2)}%</div>`;
                             

@@ -27,7 +27,11 @@ except ImportError:
 
 # Import configurations
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL
+from config import OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL, OPENAI_MODEL
+
+# Inizializza OpenAI client
+from openai import OpenAI
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Configure logging
 logger = logging.getLogger('rag_storage')
@@ -203,7 +207,7 @@ class RAGStorage:
             logger.error(f"Errore durante il caricamento dell'indice RAG {rag_id}: {e}")
             return None
     
-    def query_rag_index(self, rag_id: str, query: str, similarity_top_k: int = 3) -> Optional[Dict[str, Any]]:
+    def query_rag_index(self, rag_id: str, query: str, similarity_top_k: int = 5, relevance_threshold: float = 0.6) -> Optional[Dict[str, Any]]:
         """
         Interroga un indice RAG con una query.
         
@@ -211,6 +215,7 @@ class RAGStorage:
             rag_id (str): ID dell'indice RAG da interrogare
             query (str): Query di ricerca
             similarity_top_k (int): Numero di risultati simili da restituire
+            relevance_threshold (float): Soglia minima di rilevanza per includere un risultato
             
         Returns:
             Optional[Dict[str, Any]]: Risultati della query, o None in caso di errore
@@ -229,14 +234,22 @@ class RAGStorage:
             # Crea query engine
             query_engine = index.as_query_engine(similarity_top_k=similarity_top_k)
             
-            # Esegui query
-            response = query_engine.query(query)
+            # Esegui query per ottenere i nodi sorgenti
+            retriever_response = query_engine.retriever.retrieve(query)
             
-            # Estrai nodi sorgenti e informazioni
-            source_nodes = response.source_nodes
+            # Filtra i nodi sorgenti in base alla soglia di rilevanza
+            filtered_nodes = [node for node in retriever_response if node.score >= relevance_threshold]
+            
+            # Se non ci sono nodi sopra la soglia, considera i top 3 comunque
+            if not filtered_nodes and retriever_response:
+                filtered_nodes = sorted(retriever_response, key=lambda x: x.score, reverse=True)[:3]
+                logger.info(f"Nessun nodo sopra la soglia {relevance_threshold}, uso i top 3 disponibili")
+            
+            # Prepara le informazioni sulle fonti
             sources = []
+            context_texts = []
             
-            for node in source_nodes:
+            for node in filtered_nodes:
                 source_info = {
                     "content": node.text,
                     "score": node.score,
@@ -245,10 +258,38 @@ class RAGStorage:
                     "cache_file": node.metadata.get("cache_file", "")
                 }
                 sources.append(source_info)
+                context_texts.append(node.text)
+            
+            # Genera una risposta utilizzando direttamente OpenAI con OPENAI_MODEL
+            combined_context = "\n\n---\n\n".join(context_texts)
+            
+            prompt = f"""Basandoti sulle seguenti informazioni, rispondi alla domanda. 
+Includi solo fatti presenti nei dati forniti e non aggiungere informazioni non presenti.
+Se le informazioni fornite non sono sufficienti per rispondere, dillo chiaramente.
+
+INFORMAZIONI:
+{combined_context}
+
+DOMANDA: {query}
+
+RISPOSTA:"""
+            print(prompt)
+
+            logger.info(f"Generazione risposta con il modello {OPENAI_MODEL}")
+            completion = openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": "Sei un assistente di ricerca che risponde alle domande basandosi solo sui dati forniti."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3
+            )
+            
+            generated_response = completion.choices[0].message.content
             
             return {
                 "query": query,
-                "response": str(response),
+                "response": generated_response,
                 "sources": sources,
                 "task": metadata.get("task", ""),
                 "rag_id": rag_id
@@ -256,6 +297,8 @@ class RAGStorage:
             
         except Exception as e:
             logger.error(f"Errore durante l'interrogazione dell'indice RAG {rag_id}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
     
     def list_rag_indices(self) -> List[Dict[str, Any]]:

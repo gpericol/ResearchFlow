@@ -6,7 +6,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"  # Modello di embedding da utilizzare
 OPENAI_MODEL = "gpt-4o-mini"
-SEARCH_RESULTS_LIMIT = 30
+SEARCH_RESULTS_LIMIT = 20
 
 # Search orchestrator configuration
 MAX_RELEVANT_RESULTS = 3  # Maximum number of relevant results to find

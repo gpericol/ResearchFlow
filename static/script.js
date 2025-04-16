@@ -235,9 +235,6 @@ function pollResearchProgress(researchId, groupIndex) {
             // Aggiorniamo lo stato dei task
             updateTasksStatus(groupIndex, data);
             
-            // Aggiorniamo la barra di progresso
-            updateProgressBar(groupIndex, data);
-            
             // Controlliamo nuovamente lo stato tra 2 secondi
             setTimeout(() => pollResearchProgress(researchId, groupIndex), 2000);
         } else {
@@ -245,12 +242,6 @@ function pollResearchProgress(researchId, groupIndex) {
             const button = document.querySelector(`#task-group-${groupIndex} .research-btn`);
             button.disabled = false;
             button.textContent = "Avvia Ricerca";
-            
-            // Rimuovi la barra di progresso
-            const progressContainer = document.querySelector(`#progress-${groupIndex}`);
-            if (progressContainer) {
-                progressContainer.remove();
-            }
         }
     })
     .catch(error => {
@@ -297,37 +288,6 @@ function updateTasksStatus(groupIndex, data) {
             }
         }
     }
-}
-
-/**
- * Aggiorna la barra di progresso
- * @param {number} groupIndex - Indice del gruppo di task
- * @param {Object} data - Dati sullo stato dei task
- */
-function updateProgressBar(groupIndex, data) {
-    const progressContainer = document.querySelector(`#progress-${groupIndex}`);
-    if (!progressContainer) {
-        // Se la barra di progresso non esiste, la creiamo
-        const actionsContainer = document.querySelector(`#task-group-${groupIndex} .task-group-actions`);
-        const progressElement = document.createElement('div');
-        progressElement.className = 'progress-container';
-        progressElement.id = `progress-${groupIndex}`;
-        progressElement.innerHTML = '<div class="progress-bar"></div>';
-        actionsContainer.appendChild(progressElement);
-    }
-    
-    const progressBar = document.querySelector(`#progress-${groupIndex} .progress-bar`);
-    const totalTasks = data.total_tasks || 1;
-    const completedTasks = data.completed_tasks ? data.completed_tasks.length : 0;
-    
-    // Calcola la percentuale di completamento
-    const progressPercentage = Math.floor((completedTasks / totalTasks) * 100);
-    
-    // Aggiorna la larghezza della barra di progresso
-    progressBar.style.width = `${progressPercentage}%`;
-    
-    // Aggiunge un tooltip con la percentuale
-    progressBar.title = `${progressPercentage}% completato (${completedTasks}/${totalTasks})`;
 }
 
 /**

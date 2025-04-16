@@ -47,7 +47,7 @@ class ContentCleaner:
         self.max_threads = max_threads
         self.model = model
         
-    def clean_content(self, content: str, block_size=DEFAULT_BLOCK_SIZE, overlap=DEFAULT_OVERLAP) -> str:
+    def clean_content(self, content: str, block_size=DEFAULT_BLOCK_SIZE, overlap=DEFAULT_OVERLAP, search_query: str = None) -> str:
         """
         Pulisce il contenuto di una pagina web rimuovendo menu, pubblicità, ecc.
         
@@ -55,6 +55,7 @@ class ContentCleaner:
             content (str): Contenuto HTML o testo della pagina
             block_size (int): Dimensione massima (in caratteri) di ciascun blocco
             overlap (int): Sovrapposizione tra blocchi consecutivi
+            search_query (str, optional): Query di ricerca o task per cui si sta pulendo il testo
             
         Returns:
             str: Contenuto pulito con solo le parti informative
@@ -69,7 +70,7 @@ class ContentCleaner:
         logger.info(f"Contenuto diviso in {len(text_blocks)} blocchi")
         
         # Pulisce i blocchi in parallelo
-        clean_blocks = self._clean_blocks_parallel(text_blocks)
+        clean_blocks = self._clean_blocks_parallel(text_blocks, search_query)
         
         # Riassembla i blocchi puliti
         cleaned_content = self._reassemble_blocks(clean_blocks)
@@ -156,12 +157,13 @@ class ContentCleaner:
         logger.info(f"Contenuto diviso in {len(blocks)} blocchi (invece di potenzialmente {len(content) // block_size + 1})")
         return blocks
     
-    def _clean_blocks_parallel(self, text_blocks: List[str]) -> List[str]:
+    def _clean_blocks_parallel(self, text_blocks: List[str], search_query: str = None) -> List[str]:
         """
         Pulisce i blocchi di testo in parallelo usando OpenAI.
         
         Args:
             text_blocks (List[str]): Lista di blocchi di testo da pulire
+            search_query (str, optional): Query di ricerca o task per cui si sta pulendo il testo
             
         Returns:
             List[str]: Lista di blocchi di testo puliti
@@ -175,7 +177,7 @@ class ContentCleaner:
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_threads) as executor:
             # Sottomette tutti i blocchi per l'elaborazione
             future_to_index = {
-                executor.submit(self._clean_text_block, block, i): i 
+                executor.submit(self._clean_text_block, block, i, search_query): i 
                 for i, block in enumerate(text_blocks)
             }
             
@@ -203,13 +205,14 @@ class ContentCleaner:
         clean_blocks.sort(key=lambda x: x[0])
         return [block for _, block in clean_blocks]
     
-    def _clean_text_block(self, text: str, block_index: int) -> str:
+    def _clean_text_block(self, text: str, block_index: int, search_query: str = None) -> str:
         """
         Pulisce un singolo blocco di testo utilizzando OpenAI.
         
         Args:
             text (str): Blocco di testo da pulire
             block_index (int): Indice del blocco (per il logging)
+            search_query (str, optional): Query di ricerca o task per cui si sta pulendo il testo
             
         Returns:
             str: Blocco di testo pulito
@@ -238,7 +241,19 @@ class ContentCleaner:
             NON aggiungere commenti o spiegazioni aggiuntive.
             """
             
-            user_message = f"Ecco il testo da ripulire, mantenendo solo il contenuto informativo:\n\n{text}"
+            user_message = f"Ecco il testo da ripulire, mantenendo solo il contenuto informativo"
+            
+            # Se è presente una query di ricerca, include istruzioni specifiche per filtrare in base a essa
+            if search_query:
+                system_message += f"""
+                Inoltre, considera che sto cercando informazioni su: "{search_query}"
+                Concentrati particolarmente sul contenuto rilevante per questa ricerca.
+                Mantieni prioritariamente i paragrafi e le sezioni che si riferiscono a questo argomento.
+                Se ci sono sezioni che sembrano completamente irrilevanti per la ricerca, puoi rimuoverle.
+                """
+                user_message += f", con particolare attenzione alle informazioni relative a: {search_query}"
+            
+            user_message += f":\n\n{text}"
             
             # Usa l'API di OpenAI per pulire il testo
             response = openai.chat.completions.create(
@@ -312,7 +327,7 @@ class ContentCleaner:
         return assembled_text
 
 # Funzione di utilità per uso esterno
-def clean_webpage_content(content: str, max_threads=DEFAULT_MAX_THREADS, block_size=DEFAULT_BLOCK_SIZE, overlap=DEFAULT_OVERLAP) -> str:
+def clean_webpage_content(content: str, max_threads=DEFAULT_MAX_THREADS, block_size=DEFAULT_BLOCK_SIZE, overlap=DEFAULT_OVERLAP, search_query: str = None) -> str:
     """
     Funzione di utilità per pulire il contenuto di una pagina web.
     
@@ -321,6 +336,7 @@ def clean_webpage_content(content: str, max_threads=DEFAULT_MAX_THREADS, block_s
         max_threads (int, optional): Numero massimo di thread paralleli
         block_size (int, optional): Dimensione massima (in caratteri) di ciascun blocco
         overlap (int, optional): Sovrapposizione tra blocchi consecutivi
+        search_query (str, optional): Query di ricerca o task per cui si sta pulendo il testo
         
     Returns:
         str: Contenuto pulito con solo le parti informative
@@ -339,11 +355,11 @@ def clean_webpage_content(content: str, max_threads=DEFAULT_MAX_THREADS, block_s
     # Se il contenuto è piccolo, elaboralo direttamente senza suddividerlo
     if len(content) < block_size * 2:
         cleaner = ContentCleaner(max_threads=1)  # Un solo thread è sufficiente
-        return cleaner.clean_content(content, block_size=len(content), overlap=0)
+        return cleaner.clean_content(content, block_size=len(content), overlap=0, search_query=search_query)
     
     # Altrimenti usa la versione ottimizzata con più blocchi
     cleaner = ContentCleaner(max_threads=max_threads)
-    return cleaner.clean_content(content, block_size=block_size, overlap=overlap)
+    return cleaner.clean_content(content, block_size=block_size, overlap=overlap, search_query=search_query)
 
 # Test del cleaner
 if __name__ == "__main__":
